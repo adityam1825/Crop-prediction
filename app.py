@@ -1,54 +1,59 @@
-import streamlit as st
+from flask import Flask, request, render_template
 import numpy as np
 import pickle
+
+app = Flask(__name__)
 
 # -------------------------------
 # Load model and scaler safely
 # -------------------------------
 try:
     model = pickle.load(open('model.pkl', 'rb'))
-    st.write("✅ Model loaded.")
+    print("✅ Model loaded.")
 except Exception as e:
-    st.write("❌ Model not found or invalid:", e)
+    print("❌ Model not found or invalid:", e)
 
 try:
     scaler = pickle.load(open('scaler.pkl', 'rb'))
-    st.write("✅ Scaler loaded.")
+    print("✅ Scaler loaded.")
 except Exception as e:
     scaler = None
-    st.write("⚠️ Scaler not found:", e)
+    print("⚠️ Scaler not found:", e)
 
 # -------------------------------
-# Streamlit UI
+# Home route
 # -------------------------------
-st.title("🌾 Crop Prediction System")
-
-st.write("Enter the soil & weather values below:")
-
-N = st.number_input("Nitrogen", value=0.0)
-P = st.number_input("Phosphorus", value=0.0)
-K = st.number_input("Potassium", value=0.0)
-temperature = st.number_input("Temperature", value=0.0)
-humidity = st.number_input("Humidity", value=0.0)
-ph = st.number_input("pH Value", value=0.0)
-rainfall = st.number_input("Rainfall", value=0.0)
+@app.route('/')
+def home():
+    return render_template('index.html')
 
 # -------------------------------
-# Predict button
+# Prediction route
 # -------------------------------
-if st.button("Predict Crop"):
+@app.route('/predict', methods=['POST'])
+def predict():
     try:
+        # Fetch values from HTML form
+        N = float(request.form['Nitrogen'])
+        P = float(request.form['Phosphorus'])
+        K = float(request.form['Potassium'])
+        temperature = float(request.form['Temperature'])
+        humidity = float(request.form['Humidity'])
+        ph = float(request.form['pH'])
+        rainfall = float(request.form['Rainfall'])
+
+        # Combine into array
         input_data = np.array([[N, P, K, temperature, humidity, ph, rainfall]])
-        st.write("📥 Input data:", input_data)
+        print("📥 Input data:", input_data)
 
         # Scale if scaler exists
         if scaler is not None:
             input_data = scaler.transform(input_data)
-            st.write("📊 Scaled data:", input_data)
+            print("📊 Scaled data:", input_data)
 
         # Predict
         prediction = model.predict(input_data)
-        st.write("🔮 Raw model output:", prediction)
+        print("🔮 Raw model output:", prediction)
 
         # Crop dictionary mapping
         crop_dict = {
@@ -59,11 +64,21 @@ if st.button("Predict Crop"):
             20: "Cotton", 21: "Jute", 22: "Coffee"
         }
 
+        # Decode crop name
         crop = crop_dict.get(int(prediction[0]), "Unknown Crop")
-        result = f"🌱 **Recommended Crop:** {crop}"
+        result = f"{crop} is the best crop to be cultivated right there."
+        print("🌾 Result:", result)
 
-        st.success(result)
+        # Send back to frontend
+        return render_template('index.html', prediction_text=result)
 
     except Exception as e:
-        st.error(f"❌ Error during prediction: {e}")
+        print("❌ Error:", e)
+        return render_template('index.html', prediction_text="Error during prediction. Check model/scaler or inputs.")
+
+# -------------------------------
+# Run Flask app
+# -------------------------------
+if __name__ == "__main__":
+    app.run(debug=True)
 
